@@ -82,7 +82,7 @@ Everything below runs in Thonny on your laptop, not on the Pico.
 
 1. In the bottom-right corner of Thonny, switch the interpreter to **Local Python 3**.
 2. Install pandas and matplotlib once: Tools > Manage packages.
-3. Open `run_tests.py` and press F5. Expect "All 15 tests passed".
+3. Open `run_tests.py` and press F5. Expect "All 18 tests passed".
 4. Open `simulator/simulate.py` and press F5. It writes two days of simulated samples.
 5. Open `laptop/analyze.py` and press F5. It analyzes the simulated samples and saves a figure in `laptop/output/`.
 
