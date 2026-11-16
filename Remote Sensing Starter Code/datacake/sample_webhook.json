@@ -1,0 +1,20 @@
+{
+  "event": "232acb2c-924a-80f9-89dd-27cff8b7b403",
+  "when": 1794522024,
+  "file": "data.qo",
+  "body": {
+    "data1": 126,
+    "data2": 27850,
+    "data3": 286,
+    "data4": 286.2,
+    "data5": true
+  },
+  "session": "6872ec1c-288b-4db1-a538-689711732fd5",
+  "transport": "lorawan:ttn",
+  "best_id": "dev:0000000000000000",
+  "device": "dev:0000000000000000",
+  "product": "product:com.your-email:your-project",
+  "received": 1794522023.786602,
+  "req": "note.add",
+  "status": "success"
+}
