@@ -243,8 +243,12 @@ class Node:
         """Ask the Notecard to connect to Notehub and upload right now.
         "allow": True also lifts the Notecard's retry back-off (its "penalty box").
         After several failed tries, for example far from the gateway, the Notecard
-        waits longer and longer between attempts, even after it is moved closer."""
-        return self.request({"req": "hub.sync", "allow": True})
+        waits longer and longer between attempts, even after it is moved closer.
+        If the Notecard rejects "allow", the plain request is sent instead."""
+        rsp = self.request({"req": "hub.sync", "allow": True}, quiet=True)
+        if "err" in rsp:
+            rsp = self.request({"req": "hub.sync"})
+        return rsp
 
     def check_connection(self, wait_seconds=CONNECT_CHECK_SECONDS):
         """Sync with Notehub now and wait to see whether the LoRa link works.
@@ -252,9 +256,13 @@ class Node:
         completed (the Notecard joined the LoRaWAN network through a gateway
         and reached Notehub), False if it had not within wait_seconds.
         Students can also call this any time: node.check_connection()"""
+        if self.card is None and not self.connect():
+            return False
         print("Syncing with Notehub over LoRa. This can take a few minutes,")
         print("longer far from the gateway. Waiting up to", wait_seconds, "seconds...")
-        if "err" in self.sync():
+        rsp = self.sync()
+        if "err" in rsp:
+            print("Could not start a sync:", rsp["err"])
             return False
         last = None
         waited = 0
@@ -268,8 +276,11 @@ class Node:
                 last = status
             elif waited % 30 == 0:
                 print("  still waiting,", waited, "seconds so far")
-            # A finished sync reports "completed" and no longer reports "requested".
-            if rsp.get("completed") is not None and not rsp.get("requested"):
+            # A finished sync reports "completed" (seconds since it finished) and no
+            # longer reports "requested". Either sign that a sync finished after we
+            # asked for one counts as success.
+            completed = rsp.get("completed")
+            if completed is not None and (not rsp.get("requested") or completed <= waited + 5):
                 print("LoRa connection OK: the Notecard reached Notehub.")
                 return True
         hub = self.request({"req": "hub.status"}, quiet=True)
