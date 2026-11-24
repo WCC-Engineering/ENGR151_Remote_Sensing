@@ -49,7 +49,8 @@ MIN_DEPLOYED_SAMPLE_SECONDS = 300   # sampling faster than this only prints a wa
 
 DATA_NOTEFILE = "data.qo"       # .qo = queue, outbound (device to cloud)
 
-CONNECT_CHECK_SECONDS = 120     # how long the first-run check waits for the LoRa sync (joining can take a minute or two)
+CONNECT_CHECK_SECONDS = 300     # how long the connection check waits. Far from the gateway, joining the
+                                # LoRaWAN network can take several tries, a few minutes apart.
 
 LORA_PORT = 50                  # each LoRa template needs its own port number, 1 to 100
 
@@ -66,9 +67,12 @@ class Node:
         self.state = self._load_state()
         restore_memory(self.state)
 
+        # 100 kHz, not MicroPython's default 400 kHz: the Notecard's 10K pull-up
+        # resistors and jumper-wire connections are too slow for 400 kHz to be reliable.
         self.i2c = machine.I2C(config.I2C_ID,
                                sda=machine.Pin(config.I2C_SDA),
-                               scl=machine.Pin(config.I2C_SCL))
+                               scl=machine.Pin(config.I2C_SCL),
+                               freq=100000)
 
     # -- connecting -------------------------------------------------------------
     def connect(self, verbose=False):
@@ -81,7 +85,15 @@ class Node:
         if NOTECARD_ADDRESS not in found:
             print("Notecard (0x17) NOT found. Check wiring, power, and the I2C pins in config.py.")
             return False
-        self.card = notecard.OpenI2C(self.i2c, 0, 0)
+        try:
+            self.card = notecard.OpenI2C(self.i2c, 0, 0)
+        except Exception as err:
+            self.card = None
+            print("Notecard answered at 0x17 but did not respond to requests:", err)
+            print("  1. Unplug the USB cable for 10 seconds, plug it back in, and try once more.")
+            print("  2. Check the power wire: Pico VBUS (pin 40) to the Notecarrier's VUSB.")
+            print("  3. Press each of the four wires firmly onto its pin, or swap in new wires.")
+            return False
         if verbose:
             version = self.request({"req": "card.version"})
             print("Notecard found at 0x17:", version.get("device"))
@@ -232,7 +244,8 @@ class Node:
         completed (the Notecard joined the LoRaWAN network through a gateway
         and reached Notehub), False if it had not within wait_seconds.
         Students can also call this any time: node.check_connection()"""
-        print("Syncing with Notehub over LoRa (can take a minute or two)...")
+        print("Syncing with Notehub over LoRa. This can take a few minutes,")
+        print("longer far from the gateway. Waiting up to", wait_seconds, "seconds...")
         if "err" in self.sync():
             return False
         last = None
@@ -245,16 +258,19 @@ class Node:
             if status != last:
                 print("  Notecard:", status)
                 last = status
+            elif waited % 30 == 0:
+                print("  still waiting,", waited, "seconds so far")
             # A finished sync reports "completed" and no longer reports "requested".
             if rsp.get("completed") is not None and not rsp.get("requested"):
                 print("LoRa connection OK: the Notecard reached Notehub.")
                 return True
         hub = self.request({"req": "hub.status"}, quiet=True)
-        print("warning: no sync completed in", wait_seconds, "seconds. hub.status:",
+        print("No sync yet after", wait_seconds, "seconds. hub.status:",
               hub.get("status") or hub.get("err"))
-        print("  Check: the gateway is powered and online, the LoRa antenna is attached,")
-        print("  and the Notecard and gateway use the same region (US or EU).")
-        print("  The Notecard keeps trying on its own; run node.check_connection() to look again.")
+        print("  This is not necessarily a failure: the Notecard keeps trying on its own.")
+        print("  Leave the program running and watch Events in Notehub for 10 minutes.")
+        print("  If nothing arrives, check that the antenna is attached and pointing up,")
+        print("  move closer to the gateway, or wait longer: node.check_connection(600)")
         return False
 
     # -- between samples ------------------------------------------------------------
@@ -301,4 +317,5 @@ class Node:
                 f.write(json.dumps(self.state))
         except (OSError, TypeError, ValueError) as err:
             print("could not save state:", err)
+
 
