@@ -181,11 +181,16 @@ class Node:
 
         Uses card.restore with delete=True, which also erases the Notecard's
         settings (setup() sends them again right afterwards).
-        Returns True once the Notecard is answering again after the reset."""
+        Returns True if the Notecard accepted the reset. It returns True even if
+        the Notecard is slow to answer afterwards, so the reset is never repeated
+        on the next power-up: each reset erases queued data and makes the Notecard
+        join the LoRaWAN network again, which may not work far from the gateway."""
         print("First run: clearing old templates from the Notecard...")
-        self.request({"req": "card.restore", "delete": True})   # replies {}, then restarts
-        if not self._wait_for_notecard():
+        rsp = self.request({"req": "card.restore", "delete": True})   # replies {}, then restarts
+        if "err" in rsp:
             return False
+        if not self._wait_for_notecard():
+            return True
         if self._old_templates():
             print("warning: an old template may still be on the Notecard; ask your instructor")
         else:
@@ -235,8 +240,11 @@ class Node:
         return self.request(req)
 
     def sync(self):
-        """Ask the Notecard to connect to Notehub and upload right now."""
-        return self.request({"req": "hub.sync"})
+        """Ask the Notecard to connect to Notehub and upload right now.
+        "allow": True also lifts the Notecard's retry back-off (its "penalty box").
+        After several failed tries, for example far from the gateway, the Notecard
+        waits longer and longer between attempts, even after it is moved closer."""
+        return self.request({"req": "hub.sync", "allow": True})
 
     def check_connection(self, wait_seconds=CONNECT_CHECK_SECONDS):
         """Sync with Notehub now and wait to see whether the LoRa link works.
@@ -317,5 +325,4 @@ class Node:
                 f.write(json.dumps(self.state))
         except (OSError, TypeError, ValueError) as err:
             print("could not save state:", err)
-
 
